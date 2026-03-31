@@ -1,4 +1,4 @@
-const SAVE_KEY = "black_stair_breaking_ground_save";
+const SAVE_KEY = "black_stair_breaking_ground_save_v2";
 
 // ======================================================
 // DOM
@@ -55,6 +55,7 @@ const els = {
 const CLASS_DATA = {
   Knight: {
     glyph: "🛡",
+    portraitClass: "portrait-knight",
     maxHp: 54,
     strength: 2,
     defenseBonus: 1,
@@ -65,6 +66,7 @@ const CLASS_DATA = {
   },
   Rogue: {
     glyph: "🗡",
+    portraitClass: "portrait-rogue",
     maxHp: 42,
     strength: 1,
     defenseBonus: 0,
@@ -75,6 +77,7 @@ const CLASS_DATA = {
   },
   Occultist: {
     glyph: "🩸",
+    portraitClass: "portrait-occultist",
     maxHp: 38,
     strength: 0,
     defenseBonus: 0,
@@ -85,6 +88,7 @@ const CLASS_DATA = {
   },
   Mage: {
     glyph: "🔮",
+    portraitClass: "portrait-mage",
     maxHp: 40,
     strength: 1,
     defenseBonus: 0,
@@ -205,21 +209,22 @@ const BOSS = {
 
 const RUMORS = [
   "A sellsword is looking for coin and trouble.",
-  "Something nasty waits below, but the loot should be good.",
-  "A relic was seen deeper in the stair.",
-  "A quiet floor may be coming. Could be a good time to rest.",
+  "Something nastier than usual waits below, but the loot should be worth it.",
+  "There may be a relic deeper in the stair.",
+  "A quiet floor could be coming. Good time to rest.",
   "An apprentice mage keeps asking who is brave enough to descend.",
   "A scout claims they know the lower halls."
 ];
 
 // ======================================================
-// GAME STATE
+// STATE
 // ======================================================
 let game = {
   mode: "menu",
   player: null,
   enemy: null,
   defending: false,
+  forcedFight: false,
   rumorCompanion: null,
   lastRumor: null,
   bossPhase: 1
@@ -232,15 +237,15 @@ function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function chance(p) {
-  return Math.random() < p;
+function chance(prob) {
+  return Math.random() < prob;
 }
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
-function pct(current, max) {
+function percent(current, max) {
   if (max <= 0) return 0;
   return clamp((current / max) * 100, 0, 100);
 }
@@ -250,40 +255,28 @@ function deepCopy(obj) {
 }
 
 function makeStatuses() {
-  return {
-    bleed: 0,
-    burn: 0,
-    weak: 0,
-    guard: 0
-  };
+  return { bleed: 0, burn: 0, weak: 0, guard: 0 };
 }
 
-function statusText(statuses) {
-  const active = Object.entries(statuses)
+function activeStatusText(statuses) {
+  const list = Object.entries(statuses)
     .filter(([, v]) => v > 0)
     .map(([k, v]) => `${k}:${v}`);
-  return active.length ? active.join(", ") : "none";
-}
-
-function addLog(text) {
-  const div = document.createElement("div");
-  div.className = "log-entry";
-  div.textContent = text;
-  els.log.prepend(div);
+  return list.length ? list.join(", ") : "none";
 }
 
 function clearChoices() {
   els.choices.innerHTML = "";
 }
 
-function setScene(title, tag, text, glyph = "🜃") {
-  els.sceneTitle.textContent = title;
-  els.sceneTag.textContent = tag;
-  els.mainText.innerHTML = text;
-  els.sceneArtGlyph.textContent = glyph;
+function addLog(text) {
+  const entry = document.createElement("div");
+  entry.className = "log-entry";
+  entry.textContent = text;
+  els.log.prepend(entry);
 }
 
-function addChoice(title, sub, handler, disabled = false) {
+function addChoice(title, sub, onClick, disabled = false) {
   const btn = document.createElement("button");
   btn.className = "choice-btn";
   btn.disabled = disabled;
@@ -291,16 +284,89 @@ function addChoice(title, sub, handler, disabled = false) {
     <span class="choice-title">${title}</span>
     <span class="choice-sub">${sub}</span>
   `;
-  btn.addEventListener("click", handler);
+  btn.addEventListener("click", onClick);
   els.choices.appendChild(btn);
+}
+
+function setPortraitClass(element, cls) {
+  element.className = element.className
+    .split(" ")
+    .filter(c => !c.startsWith("portrait-") || c === "portrait")
+    .join(" ");
+
+  const baseClasses = {
+    playerPortrait: "portrait portrait-player",
+    companionPortrait: "portrait portrait-companion",
+    enemyPortrait: "portrait portrait-enemy",
+  };
+
+  if (element === els.playerPortrait) element.className = baseClasses.playerPortrait;
+  if (element === els.companionPortrait) element.className = baseClasses.companionPortrait;
+  if (element === els.enemyPortrait) element.className = baseClasses.enemyPortrait;
+
+  if (cls) {
+    element.classList.add(cls);
+  }
+}
+
+function setScene(title, tag, html, glyph = "🜃", sceneClass = "portrait-dungeon") {
+  els.sceneTitle.textContent = title;
+  els.sceneTag.textContent = tag;
+  els.mainText.innerHTML = html;
+  els.sceneArtGlyph.textContent = glyph;
+
+  const scenePortrait = document.querySelector(".portrait-scene");
+  if (scenePortrait) {
+    scenePortrait.className = "portrait portrait-scene";
+    scenePortrait.classList.add(sceneClass);
+  }
+}
+
+function saveGame() {
+  if (!game.player) {
+    addLog("No active run to save.");
+    return;
+  }
+  localStorage.setItem(SAVE_KEY, JSON.stringify(game));
+  addLog("Game saved.");
+}
+
+function loadGame() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) {
+    addLog("No save found.");
+    return;
+  }
+
+  try {
+    const data = JSON.parse(raw);
+    game = data;
+    addLog("Game loaded.");
+    updateUI();
+
+    if (game.mode === "combat" && game.enemy) {
+      renderCombat();
+    } else if (game.mode === "town") {
+      renderTown();
+    } else if (game.mode === "path") {
+      renderPathChoice();
+    } else if (game.mode === "dead") {
+      renderDeath();
+    } else {
+      renderTown();
+    }
+  } catch (err) {
+    console.error(err);
+    addLog("Save data was invalid.");
+  }
+}
+
+function clearLog() {
+  els.log.innerHTML = "";
 }
 
 function hasRelic(effect) {
   return !!game.player?.relics?.some(r => r.effect === effect);
-}
-
-function getPlayerClassData() {
-  return CLASS_DATA[game.player.className];
 }
 
 function playerDefense() {
@@ -312,36 +378,29 @@ function playerDefense() {
 }
 
 function playerCritChance() {
-  if (!game.player) return 0.14;
   let value = 0.14;
   if (game.player.className === "Rogue") value += 0.10;
   if (hasRelic("plusCrit")) value += 0.08;
   return value;
 }
 
-function playerCompanionAttackBonus() {
-  return game.player?.companion?.bonus === "attack" ? 1 : 0;
+function playerAttackBonus() {
+  let bonus = 0;
+  if (hasRelic("plusAttack")) bonus += 1;
+  if (game.player.companion?.bonus === "attack") bonus += 1;
+  return bonus;
 }
 
 function playerBurnBonus() {
   let bonus = 0;
   if (hasRelic("burnPlus")) bonus += 1;
-  if (game.player?.companion?.bonus === "burn") bonus += 1;
-  if (game.player?.className === "Mage") bonus += 1;
+  if (game.player.companion?.bonus === "burn") bonus += 1;
+  if (game.player.className === "Mage") bonus += 1;
   return bonus;
 }
 
 function playerBleedBonus() {
   return hasRelic("bleedPlus") ? 1 : 0;
-}
-
-function gainGold(amount) {
-  let final = amount;
-  if (hasRelic("plusGold")) {
-    final += Math.max(2, Math.floor(amount / 5));
-  }
-  game.player.gold += final;
-  return final;
 }
 
 function healPlayer(amount) {
@@ -352,13 +411,31 @@ function healPlayer(amount) {
   return game.player.hp - before;
 }
 
-function weaponMod() {
-  return WEAPONS[game.player.weapon].mod;
+function gainGold(amount) {
+  let total = amount;
+  if (hasRelic("plusGold")) {
+    total += Math.max(2, Math.floor(amount / 5));
+  }
+  game.player.gold += total;
+  return total;
 }
 
-function applyStatus(target, statusName, amount) {
-  if (target.statuses[statusName] !== undefined) {
-    target.statuses[statusName] += amount;
+function randomRelic() {
+  const owned = new Set(game.player.relics.map(r => r.name));
+  const pool = RELICS.filter(r => !owned.has(r.name));
+  if (!pool.length) return null;
+  return deepCopy(pool[randInt(0, pool.length - 1)]);
+}
+
+function randomCompanion() {
+  const pool = COMPANIONS.filter(c => !game.player.companion || c.name !== game.player.companion.name);
+  if (!pool.length) return null;
+  return deepCopy(pool[randInt(0, pool.length - 1)]);
+}
+
+function applyStatus(target, name, amount) {
+  if (target.statuses[name] !== undefined) {
+    target.statuses[name] += amount;
   }
 }
 
@@ -394,176 +471,29 @@ function tickStatuses(unit, isEnemy = false) {
 
 function levelUpIfNeeded() {
   let leveled = false;
+
   while (game.player.xp >= game.player.xpToNext) {
     game.player.xp -= game.player.xpToNext;
     game.player.level += 1;
     game.player.xpToNext = Math.floor(game.player.xpToNext * 1.4);
     game.player.maxHp += 8;
     game.player.hp = game.player.maxHp;
+
     if (game.player.level % 2 === 0) {
       game.player.strength += 1;
     }
+
     leveled = true;
   }
+
   return leveled;
 }
 
-function updateUI() {
-  if (!game.player) {
-    els.playerName.textContent = "-";
-    els.playerClass.textContent = "-";
-    els.playerLevel.textContent = "-";
-    els.playerGold.textContent = "-";
-    els.playerDepth.textContent = "-";
-    els.playerWeapon.textContent = "-";
-    els.playerArmor.textContent = "-";
-    els.playerSkill.textContent = "-";
-    els.playerDefense.textContent = "-";
-    els.hpBar.style.width = "0%";
-    els.hpText.textContent = "0 / 0";
-    els.xpBar.style.width = "0%";
-    els.xpText.textContent = "0 / 0";
-    els.playerPortrait.innerHTML = "<span>?</span>";
-    els.inventoryList.innerHTML = `<div class="list-item empty-item">No run active.</div>`;
-    els.relicList.innerHTML = `<div class="list-item empty-item">No relics.</div>`;
-    els.statusList.innerHTML = `<div class="list-item empty-item">No statuses.</div>`;
-    els.companionPortrait.innerHTML = "<span>-</span>";
-    els.companionName.textContent = "None";
-    els.companionDesc.textContent = "No companion recruited.";
-    els.enemyPanel.classList.add("hidden");
-    return;
-  }
-
-  els.playerName.textContent = game.player.name;
-  els.playerClass.textContent = game.player.className;
-  els.playerLevel.textContent = String(game.player.level);
-  els.playerGold.textContent = String(game.player.gold);
-  els.playerDepth.textContent = String(game.player.depth);
-  els.playerWeapon.textContent = game.player.weapon;
-  els.playerArmor.textContent = game.player.armor;
-  els.playerSkill.textContent = `${game.player.skill} (CD ${game.player.skillCd})`;
-  els.playerDefense.textContent = String(playerDefense());
-  els.hpBar.style.width = `${pct(game.player.hp, game.player.maxHp)}%`;
-  els.hpText.textContent = `${game.player.hp} / ${game.player.maxHp}`;
-  els.xpBar.style.width = `${pct(game.player.xp, game.player.xpToNext)}%`;
-  els.xpText.textContent = `${game.player.xp} / ${game.player.xpToNext}`;
-  els.playerPortrait.innerHTML = `<span>${CLASS_DATA[game.player.className].glyph}</span>`;
-
-  if (game.player.companion) {
-    els.companionPortrait.innerHTML = `<span>${game.player.companion.glyph}</span>`;
-    els.companionName.textContent = game.player.companion.name;
-    els.companionDesc.textContent = game.player.companion.desc;
-  } else {
-    els.companionPortrait.innerHTML = `<span>-</span>`;
-    els.companionName.textContent = "None";
-    els.companionDesc.textContent = "No companion recruited.";
-  }
-
-  els.inventoryList.innerHTML = "";
-  const invEntries = Object.entries(game.player.inventory);
-  invEntries.forEach(([name, qty]) => {
-    const item = document.createElement("div");
-    item.className = "list-item";
-    item.textContent = `${name} x${qty}`;
-    els.inventoryList.appendChild(item);
-  });
-
-  els.relicList.innerHTML = "";
-  if (game.player.relics.length === 0) {
-    els.relicList.innerHTML = `<div class="list-item empty-item">No relics yet.</div>`;
-  } else {
-    game.player.relics.forEach(relic => {
-      const item = document.createElement("div");
-      item.className = "list-item";
-      item.innerHTML = `<strong>${relic.name}</strong><br><span class="muted">${relic.desc}</span>`;
-      els.relicList.appendChild(item);
-    });
-  }
-
-  els.statusList.innerHTML = "";
-  const playerStatusEntries = Object.entries(game.player.statuses).filter(([, v]) => v > 0);
-  if (playerStatusEntries.length === 0) {
-    els.statusList.innerHTML = `<div class="list-item empty-item">No active statuses.</div>`;
-  } else {
-    playerStatusEntries.forEach(([name, value]) => {
-      const item = document.createElement("div");
-      item.className = "list-item";
-      item.textContent = `${name}: ${value}`;
-      els.statusList.appendChild(item);
-    });
-  }
-
-  if (game.enemy) {
-    els.enemyPanel.classList.remove("hidden");
-    els.enemyName.textContent = game.enemy.name;
-    els.enemyStatuses.textContent = `Statuses: ${statusText(game.enemy.statuses)}`;
-    els.enemyHpBar.style.width = `${pct(game.enemy.hp, game.enemy.maxHp)}%`;
-    els.enemyHpText.textContent = `${Math.max(0, game.enemy.hp)} / ${game.enemy.maxHp}`;
-    els.enemyPortrait.innerHTML = `<span>${game.enemy.glyph || "☠"}</span>`;
-  } else {
-    els.enemyPanel.classList.add("hidden");
-  }
+function weaponMod() {
+  return WEAPONS[game.player.weapon].mod;
 }
 
-function resetEnemy() {
-  game.enemy = null;
-  game.defending = false;
-  updateUI();
-}
-
-function saveGame() {
-  if (!game.player) {
-    addLog("No active run to save.");
-    return;
-  }
-  localStorage.setItem(SAVE_KEY, JSON.stringify(game));
-  addLog("Game saved.");
-}
-
-function loadGame() {
-  const raw = localStorage.getItem(SAVE_KEY);
-  if (!raw) {
-    addLog("No save found.");
-    return;
-  }
-  try {
-    const data = JSON.parse(raw);
-    game = data;
-    addLog("Game loaded.");
-    updateUI();
-    if (game.mode === "town") {
-      showTown();
-    } else if (game.mode === "combat" && game.enemy) {
-      showCombat();
-    } else if (game.mode === "path") {
-      showPathChoice();
-    } else {
-      showTown();
-    }
-  } catch (err) {
-    console.error(err);
-    addLog("Save data was invalid.");
-  }
-}
-
-function clearLog() {
-  els.log.innerHTML = "";
-}
-
-function randomRelic() {
-  const owned = new Set(game.player.relics.map(r => r.name));
-  const pool = RELICS.filter(r => !owned.has(r.name));
-  if (!pool.length) return null;
-  return deepCopy(pool[randInt(0, pool.length - 1)]);
-}
-
-function randomCompanion() {
-  const pool = COMPANIONS.filter(c => !game.player.companion || c.name !== game.player.companion.name);
-  if (!pool.length) return null;
-  return deepCopy(pool[randInt(0, pool.length - 1)]);
-}
-
-function createPlayer(name, className) {
+function makePlayer(name, className) {
   const c = CLASS_DATA[className];
   return {
     name,
@@ -602,578 +532,15 @@ function createPlayer(name, className) {
   };
 }
 
-// ======================================================
-// NEW RUN FLOW
-// ======================================================
-function startNewRunFlow() {
-  game = {
-    mode: "menu",
-    player: null,
-    enemy: null,
-    defending: false,
-    rumorCompanion: null,
-    lastRumor: null,
-    bossPhase: 1
-  };
-
-  clearChoices();
-  resetEnemy();
-  setScene(
-    "Black Stair: Breaking Ground",
-    "New Run",
-    "Enter a name, then choose a class. This is the reboot: cleaner structure, stronger presentation, and just enough bad decisions to feel right.",
-    "🜃"
-  );
-
-  const nameInput = document.createElement("input");
-  nameInput.type = "text";
-  nameInput.placeholder = "Adventurer name";
-  nameInput.value = "Nameless";
-  nameInput.style.width = "100%";
-  nameInput.style.padding = "0.8rem";
-  nameInput.style.borderRadius = "10px";
-  nameInput.style.border = "1px solid #2c2c38";
-  nameInput.style.background = "#111118";
-  nameInput.style.color = "#ece7dc";
-  nameInput.style.marginBottom = "1rem";
-
-  els.choices.appendChild(nameInput);
-
-  Object.entries(CLASS_DATA).forEach(([className, data]) => {
-    addChoice(
-      `${data.glyph} ${className}`,
-      `${data.desc} | HP ${data.maxHp} | Skill: ${data.skill}`,
-      () => {
-        const name = nameInput.value.trim() || "Nameless";
-        game.player = createPlayer(name, className);
-        chooseStartingBonus();
-      }
-    );
-  });
-
-  updateUI();
-}
-
-function chooseStartingBonus() {
-  game.mode = "setup";
-  clearChoices();
-  resetEnemy();
-  setScene(
-    "Choose Starting Bonus",
-    "Setup",
-    "Pick one starting edge. This is a light nudge, not a whole destiny.",
-    "🎒"
-  );
-
-  addChoice(
-    "Random Relic",
-    "Start with a relic.",
-    () => {
-      const relic = randomRelic();
-      if (relic) {
-        game.player.relics.push(relic);
-        addLog(`You start with relic: ${relic.name}.`);
-      }
-      showTown();
-    }
-  );
-
-  addChoice(
-    "Random Companion",
-    "Start with a companion.",
-    () => {
-      const companion = randomCompanion();
-      if (companion) {
-        game.player.companion = companion;
-        addLog(`${companion.name} joins you at the start.`);
-      }
-      showTown();
-    }
-  );
-
-  addChoice(
-    "Extra Supplies",
-    "+2 Potion, +1 Bomb, +25 gold.",
-    () => {
-      game.player.inventory.Potion += 2;
-      game.player.inventory.Bomb += 1;
-      game.player.gold += 25;
-      addLog("You pack extra supplies.");
-      showTown();
-    }
-  );
-
-  updateUI();
-}
-
-// ======================================================
-// TOWN
-// ======================================================
-function showTown() {
-  game.mode = "town";
-  resetEnemy();
-  clearChoices();
-
-  setScene(
-    "Ashen Town",
-    "Town",
-    "The black stair waits below. For now, the town still holds: steel, candles, ale, rumors, and people with just enough poor judgment to follow you.",
-    "🏘"
-  );
-
-  addChoice("Descend", "Head toward the stair.", showPathChoice);
-  addChoice("Blacksmith", "Buy weapons and armor.", showBlacksmith);
-  addChoice("Apothecary", "Buy healing and utility items.", showApothecary);
-  addChoice("Tavern", "Rest, gamble, and hear rumors.", showTavern);
-  addChoice("Chapel", "Seek blessing or make a darker bargain.", showChapel);
-
-  updateUI();
-}
-
-function showBlacksmith() {
-  clearChoices();
-  setScene("Blacksmith", "Town", "Steel for sale. Buy carefully: numbers matter more than confidence.", "⚒");
-
-  Object.entries(WEAPONS).forEach(([name, data]) => {
-    if (data.price <= 0) return;
-    const owned = game.player.weapon === name;
-    addChoice(
-      `${name}`,
-      `${data.min}-${data.max} dmg${data.mod ? ` | ${data.mod}` : ""} | ${data.price} gold${owned ? " | equipped" : ""}`,
-      () => {
-        if (owned) {
-          addLog(`${name} is already equipped.`);
-          showBlacksmith();
-          return;
-        }
-        if (game.player.gold < data.price) {
-          addLog("Not enough gold.");
-          showBlacksmith();
-          return;
-        }
-        game.player.gold -= data.price;
-        game.player.weapon = name;
-        addLog(`You equip ${name}.`);
-        showBlacksmith();
-      }
-    );
-  });
-
-  Object.entries(ARMORS).forEach(([name, data]) => {
-    if (data.price <= 0) return;
-    const owned = game.player.armor === name;
-    addChoice(
-      `${name}`,
-      `+${data.defense} defense | ${data.price} gold${owned ? " | equipped" : ""}`,
-      () => {
-        if (owned) {
-          addLog(`${name} is already equipped.`);
-          showBlacksmith();
-          return;
-        }
-        if (game.player.gold < data.price) {
-          addLog("Not enough gold.");
-          showBlacksmith();
-          return;
-        }
-        game.player.gold -= data.price;
-        game.player.armor = name;
-        addLog(`You equip ${name}.`);
-        showBlacksmith();
-      }
-    );
-  });
-
-  addChoice("Back", "Return to town.", showTown);
-  updateUI();
-}
-
-function showApothecary() {
-  clearChoices();
-  setScene("Apothecary", "Town", "Bottles, powders, and improvised solutions to violent problems.", "🧪");
-
-  Object.entries(ITEMS).forEach(([name, data]) => {
-    addChoice(
-      name,
-      `${data.type === "heal" ? `Heals ${data.heal}` : data.type === "bomb" ? "Deals damage" : data.type === "escape" ? "Escape a non-forced fight" : `+${data.hpGain} max HP and heal`} | ${data.price} gold`,
-      () => {
-        if (game.player.gold < data.price) {
-          addLog("Not enough gold.");
-          showApothecary();
-          return;
-        }
-        game.player.gold -= data.price;
-        game.player.inventory[name] += 1;
-        addLog(`Bought ${name}.`);
-        showApothecary();
-      }
-    );
-  });
-
-  addChoice("Back", "Return to town.", showTown);
-  updateUI();
-}
-
-function showTavern() {
-  clearChoices();
-  const rumorLine = game.lastRumor ? `<br><span class="accent">Latest rumor:</span> ${game.lastRumor}` : "";
-  setScene(
-    "Tavern",
-    "Town",
-    `A room full of warm food, stale air, and people pretending not to think about the stair.${rumorLine}`,
-    "🍺"
-  );
-
-  addChoice(
-    "Meal and Rest",
-    "Recover 20 HP for 10 gold.",
-    () => {
-      if (game.player.gold < 10) {
-        addLog("Not enough gold.");
-      } else {
-        game.player.gold -= 10;
-        const healed = healPlayer(20);
-        addLog(`You recover ${healed} HP.`);
-      }
-      showTavern();
-    }
-  );
-
-  addChoice(
-    "Gamble",
-    "Roll dice against the house.",
-    () => {
-      const betRaw = prompt("Bet how much gold?", "10");
-      if (!betRaw) {
-        showTavern();
-        return;
-      }
-      const bet = Number(betRaw);
-      if (!Number.isInteger(bet) || bet <= 0) {
-        addLog("That is not a valid bet.");
-        showTavern();
-        return;
-      }
-      if (bet > game.player.gold) {
-        addLog("Not enough gold.");
-        showTavern();
-        return;
-      }
-      const playerRoll = randInt(1, 6);
-      const houseRoll = randInt(1, 6);
-      addLog(`You roll ${playerRoll}. The house rolls ${houseRoll}.`);
-      if (playerRoll > houseRoll) {
-        game.player.gold += bet;
-        addLog(`You win ${bet} gold.`);
-      } else if (playerRoll < houseRoll) {
-        game.player.gold -= bet;
-        addLog(`You lose ${bet} gold.`);
-      } else {
-        addLog("Tie.");
-      }
-      showTavern();
-    }
-  );
-
-  addChoice(
-    "Hear Rumors",
-    "Sometimes information. Sometimes company.",
-    () => {
-      resolveRumor();
-      showTavern();
-    }
-  );
-
-  if (game.rumorCompanion) {
-    addChoice(
-      `Recruit ${game.rumorCompanion.name}`,
-      "Someone in the tavern is willing to descend with you.",
-      () => {
-        game.player.companion = deepCopy(game.rumorCompanion);
-        addLog(`${game.rumorCompanion.name} joins you from the tavern.`);
-        game.rumorCompanion = null;
-        showTavern();
-      }
-    );
-  }
-
-  addChoice("Back", "Return to town.", showTown);
-  updateUI();
-}
-
-function resolveRumor() {
-  const rumor = RUMORS[randInt(0, RUMORS.length - 1)];
-  game.lastRumor = rumor;
-  addLog(`Rumor: ${rumor}`);
-
-  if (chance(0.45)) {
-    const companion = randomCompanion();
-    if (companion) {
-      game.rumorCompanion = companion;
-      addLog(`${companion.name} can be recruited at the tavern.`);
-    }
-  } else {
-    game.rumorCompanion = null;
-  }
-}
-
-function showChapel() {
-  clearChoices();
-  setScene("Chapel", "Town", "Candles, stone, and the sort of silence that either comforts or evaluates you.", "🕯");
-
-  addChoice(
-    "Donate",
-    "15 gold. Gain blessing and recover some HP.",
-    () => {
-      if (game.player.gold < 15) {
-        addLog("Not enough gold.");
-        showChapel();
-        return;
-      }
-      game.player.gold -= 15;
-      game.player.flags.blessed = true;
-      game.player.flags.cursed = false;
-      const healed = healPlayer(12);
-      addLog(`You are blessed and recover ${healed} HP.`);
-      showChapel();
-    }
-  );
-
-  addChoice(
-    "Blood Oath",
-    "Once only. Lose 3 max HP, gain 2 strength.",
-    () => {
-      if (game.player.flags.bloodOath) {
-        addLog("You have already taken the blood oath.");
-        showChapel();
-        return;
-      }
-      game.player.flags.bloodOath = true;
-      game.player.maxHp = Math.max(10, game.player.maxHp - 3);
-      game.player.hp = Math.min(game.player.hp, game.player.maxHp);
-      game.player.strength += 2;
-      addLog("You lose 3 max HP and gain 2 strength.");
-      showChapel();
-    }
-  );
-
-  addChoice(
-    "Cleanse Curse",
-    "18 gold to remove curse.",
-    () => {
-      if (game.player.gold < 18) {
-        addLog("Not enough gold.");
-        showChapel();
-        return;
-      }
-      game.player.gold -= 18;
-      game.player.flags.cursed = false;
-      addLog("Your curse is lifted.");
-      showChapel();
-    }
-  );
-
-  addChoice("Back", "Return to town.", showTown);
-  updateUI();
-}
-
-// ======================================================
-// DUNGEON / PATH
-// ======================================================
-function showPathChoice() {
-  game.mode = "path";
-  clearChoices();
-  resetEnemy();
-
-  setScene(
-    `Depth ${game.player.depth + 1}`,
-    "Dungeon",
-    "Choose your next room. This is where runs start to become stories, good or otherwise.",
-    "🪜"
-  );
-
-  addChoice("Fight", "A standard encounter.", () => enterRoom("fight"));
-  addChoice("Event", "Shrine, treasure, rumor, or stranger.", () => enterRoom("event"));
-  addChoice("Elite", "More dangerous, better rewards.", () => enterRoom("elite"));
-  addChoice("Rest", "Recover some HP.", () => enterRoom("rest"));
-  addChoice("Return to Town", "Play it safe and head back.", showTown);
-
-  updateUI();
-}
-
-function enterRoom(type) {
-  const nextDepth = game.player.depth + 1;
-
-  if (nextDepth === 5 || nextDepth === 9) {
-    game.player.depth = nextDepth;
-    const boss = makeMiniboss(nextDepth);
-    startCombat(boss, true);
-    return;
-  }
-
-  if (nextDepth >= 10) {
-    game.player.depth = nextDepth;
-    startBossFight();
-    return;
-  }
-
-  game.player.depth = nextDepth;
-
-  if (type === "fight") {
-    startCombat(makeEnemy(nextDepth), false);
-  } else if (type === "elite") {
-    startCombat(makeElite(nextDepth), false);
-  } else if (type === "event") {
-    resolveEvent();
-  } else if (type === "rest") {
-    const amount = randInt(16, 24) + (game.player.flags.blessed ? 4 : 0);
-    const healed = healPlayer(amount);
-    addLog(`You rest and recover ${healed} HP.`);
-    showPathChoice();
-  }
-}
-
-function resolveEvent() {
-  const roll = randInt(1, 100);
-
-  if (roll <= 24) {
-    const gold = gainGold(randInt(24, 42) + game.player.depth * 2);
-    addLog(`You find ${gold} gold.`);
-    if (chance(0.55)) {
-      const itemName = ["Potion", "Bomb", "Hi-Potion"][randInt(0, 2)];
-      game.player.inventory[itemName] += 1;
-      addLog(`You also find: ${itemName}.`);
-    }
-    showPathChoice();
-    return;
-  }
-
-  if (roll <= 46) {
-    clearChoices();
-    setScene("Shrine", "Event", "A dark little shrine waits in the dust.", "⛩");
-    addChoice("Pray", "Chance to be blessed or recover HP.", () => {
-      if (chance(0.75)) {
-        game.player.flags.blessed = true;
-        game.player.flags.cursed = false;
-        const healed = healPlayer(12);
-        addLog(`You are blessed and recover ${healed} HP.`);
-      } else {
-        const healed = healPlayer(8);
-        addLog(`You recover ${healed} HP.`);
-      }
-      showPathChoice();
-    });
-    addChoice("Steal Offering", "Gain gold, become cursed.", () => {
-      const gold = gainGold(randInt(24, 44));
-      game.player.flags.cursed = true;
-      game.player.flags.blessed = false;
-      addLog(`You steal ${gold} gold and become cursed.`);
-      showPathChoice();
-    });
-    addChoice("Leave", "Walk on.", showPathChoice);
-    updateUI();
-    return;
-  }
-
-  if (roll <= 62) {
-    clearChoices();
-    setScene("Wounded Scout", "Event", "A scout from town is in bad shape.", "🏹");
-    addChoice("Give Potion", "Help them with a Potion.", () => {
-      if (game.player.inventory.Potion <= 0) {
-        addLog("You have no Potion.");
-      } else {
-        game.player.inventory.Potion -= 1;
-        game.player.flags.rescuedScout = true;
-        const gold = gainGold(30);
-        addLog(`You help the scout and gain ${gold} gold.`);
-        if (chance(0.25)) {
-          const relic = randomRelic();
-          if (relic) {
-            game.player.relics.push(relic);
-            addLog(`The scout gives you relic: ${relic.name}.`);
-          }
-        }
-      }
-      showPathChoice();
-    });
-    addChoice("Help Them Back", "No item needed.", () => {
-      game.player.flags.rescuedScout = true;
-      const healed = healPlayer(10);
-      addLog(`You help the scout back and recover ${healed} HP.`);
-      showPathChoice();
-    });
-    addChoice("Search Their Bag", "Take gold, become cursed.", () => {
-      const gold = gainGold(randInt(18, 28));
-      game.player.flags.cursed = true;
-      addLog(`You take ${gold} gold and become cursed.`);
-      showPathChoice();
-    });
-    addChoice("Leave", "Walk on.", showPathChoice);
-    updateUI();
-    return;
-  }
-
-  if (roll <= 78) {
-    const companion = randomCompanion();
-    if (companion) {
-      clearChoices();
-      setScene("Wanderer", "Event", `${companion.name} is willing to join you.`, companion.glyph);
-      addChoice("Recruit", companion.desc, () => {
-        game.player.companion = companion;
-        addLog(`${companion.name} joins you.`);
-        showPathChoice();
-      });
-      addChoice("Decline", "Continue alone.", showPathChoice);
-      updateUI();
-      return;
-    }
-  }
-
-  if (roll <= 90) {
-    clearChoices();
-    setScene("Shadow Peddler", "Event", "A traveling merchant offers a few practical sins.", "🧳");
-    addChoice("Buy Potion", "14 gold.", () => quickBuy("Potion", 14));
-    addChoice("Buy Bomb", "20 gold.", () => quickBuy("Bomb", 20));
-    addChoice("Buy Smoke Bomb", "18 gold.", () => quickBuy("Smoke Bomb", 18));
-    addChoice("Buy Hi-Potion", "26 gold.", () => quickBuy("Hi-Potion", 26));
-    addChoice("Leave", "Move on.", showPathChoice);
-    updateUI();
-    return;
-  }
-
-  const relic = randomRelic();
-  if (relic) {
-    game.player.relics.push(relic);
-    addLog(`You discover relic: ${relic.name}.`);
-  } else {
-    const gold = gainGold(35);
-    addLog(`The pedestal is empty, but you find ${gold} gold nearby.`);
-  }
-  showPathChoice();
-}
-
-function quickBuy(itemName, cost) {
-  if (game.player.gold < cost) {
-    addLog("Not enough gold.");
-  } else {
-    game.player.gold -= cost;
-    game.player.inventory[itemName] += 1;
-    addLog(`Bought ${itemName}.`);
-  }
-  showPathChoice();
-}
-
-// ======================================================
-// ENEMIES
-// ======================================================
 function makeEnemy(depth) {
   const t = ENEMIES[randInt(0, ENEMIES.length - 1)];
   const bonus = Math.floor(depth / 3);
+  const hp = randInt(t.hp[0], t.hp[1]) + bonus * 2;
   return {
     name: t.name,
     glyph: t.glyph,
-    hp: randInt(t.hp[0], t.hp[1]) + bonus * 2,
-    maxHp: randInt(t.hp[0], t.hp[1]) + bonus * 2,
+    hp,
+    maxHp: hp,
     atkMin: t.atk[0] + bonus,
     atkMax: t.atk[1] + bonus,
     gold: randInt(t.gold[0], t.gold[1]) + bonus * 3,
@@ -1223,33 +590,794 @@ function makeMiniboss(depth) {
   };
 }
 
+function setEnemyPanelVisible(visible) {
+  if (visible) els.enemyPanel.classList.remove("hidden");
+  else els.enemyPanel.classList.add("hidden");
+}
+
+function updateUI() {
+  if (!game.player) {
+    els.playerName.textContent = "-";
+    els.playerClass.textContent = "-";
+    els.playerLevel.textContent = "-";
+    els.playerGold.textContent = "-";
+    els.playerDepth.textContent = "-";
+    els.playerWeapon.textContent = "-";
+    els.playerArmor.textContent = "-";
+    els.playerSkill.textContent = "-";
+    els.playerDefense.textContent = "-";
+    els.hpBar.style.width = "0%";
+    els.hpText.textContent = "0 / 0";
+    els.xpBar.style.width = "0%";
+    els.xpText.textContent = "0 / 0";
+    els.playerPortrait.innerHTML = "<span>?</span>";
+    setPortraitClass(els.playerPortrait, null);
+
+    els.inventoryList.innerHTML = `<div class="list-item empty-item">No run active.</div>`;
+    els.relicList.innerHTML = `<div class="list-item empty-item">No relics.</div>`;
+    els.statusList.innerHTML = `<div class="list-item empty-item">No statuses.</div>`;
+
+    els.companionPortrait.innerHTML = "<span>-</span>";
+    els.companionName.textContent = "None";
+    els.companionDesc.textContent = "No companion recruited.";
+    setPortraitClass(els.companionPortrait, null);
+
+    setEnemyPanelVisible(false);
+    return;
+  }
+
+  const classData = CLASS_DATA[game.player.className];
+
+  els.playerName.textContent = game.player.name;
+  els.playerClass.textContent = game.player.className;
+  els.playerLevel.textContent = String(game.player.level);
+  els.playerGold.textContent = String(game.player.gold);
+  els.playerDepth.textContent = String(game.player.depth);
+  els.playerWeapon.textContent = game.player.weapon;
+  els.playerArmor.textContent = game.player.armor;
+  els.playerSkill.textContent = `${game.player.skill} (CD ${game.player.skillCd})`;
+  els.playerDefense.textContent = String(playerDefense());
+
+  els.hpBar.style.width = `${percent(game.player.hp, game.player.maxHp)}%`;
+  els.hpText.textContent = `${game.player.hp} / ${game.player.maxHp}`;
+  els.xpBar.style.width = `${percent(game.player.xp, game.player.xpToNext)}%`;
+  els.xpText.textContent = `${game.player.xp} / ${game.player.xpToNext}`;
+
+  els.playerPortrait.innerHTML = `<span>${classData.glyph}</span>`;
+  setPortraitClass(els.playerPortrait, classData.portraitClass);
+
+  if (game.player.companion) {
+    els.companionPortrait.innerHTML = `<span>${game.player.companion.glyph}</span>`;
+    els.companionName.textContent = game.player.companion.name;
+    els.companionDesc.textContent = game.player.companion.desc;
+    setPortraitClass(els.companionPortrait, "portrait-town");
+  } else {
+    els.companionPortrait.innerHTML = "<span>-</span>";
+    els.companionName.textContent = "None";
+    els.companionDesc.textContent = "No companion recruited.";
+    setPortraitClass(els.companionPortrait, "portrait-town");
+  }
+
+  els.inventoryList.innerHTML = "";
+  Object.entries(game.player.inventory).forEach(([name, qty]) => {
+    const div = document.createElement("div");
+    div.className = "list-item";
+    div.textContent = `${name} x${qty}`;
+    els.inventoryList.appendChild(div);
+  });
+
+  els.relicList.innerHTML = "";
+  if (game.player.relics.length === 0) {
+    els.relicList.innerHTML = `<div class="list-item empty-item">No relics yet.</div>`;
+  } else {
+    game.player.relics.forEach(relic => {
+      const div = document.createElement("div");
+      div.className = "list-item";
+      div.innerHTML = `<strong>${relic.name}</strong><br><span class="muted">${relic.desc}</span>`;
+      els.relicList.appendChild(div);
+    });
+  }
+
+  els.statusList.innerHTML = "";
+  const statuses = Object.entries(game.player.statuses).filter(([, v]) => v > 0);
+  if (!statuses.length) {
+    els.statusList.innerHTML = `<div class="list-item empty-item">No active statuses.</div>`;
+  } else {
+    statuses.forEach(([name, val]) => {
+      const div = document.createElement("div");
+      div.className = "list-item";
+      div.textContent = `${name}: ${val}`;
+      els.statusList.appendChild(div);
+    });
+  }
+
+  if (game.enemy) {
+    setEnemyPanelVisible(true);
+    els.enemyName.textContent = game.enemy.name;
+    els.enemyStatuses.textContent = `Statuses: ${activeStatusText(game.enemy.statuses)}`;
+    els.enemyHpBar.style.width = `${percent(Math.max(0, game.enemy.hp), game.enemy.maxHp)}%`;
+    els.enemyHpText.textContent = `${Math.max(0, game.enemy.hp)} / ${game.enemy.maxHp}`;
+    els.enemyPortrait.innerHTML = `<span>${game.enemy.glyph}</span>`;
+    setPortraitClass(els.enemyPortrait, "portrait-enemy-theme");
+  } else {
+    setEnemyPanelVisible(false);
+  }
+}
+
+function resetEnemy() {
+  game.enemy = null;
+  game.defending = false;
+  game.forcedFight = false;
+  updateUI();
+}
+
+// ======================================================
+// RENDER FLOWS
+// ======================================================
+function renderMainMenu() {
+  clearChoices();
+  resetEnemy();
+  setScene(
+    "Black Stair: Breaking Ground",
+    "Menu",
+    "The black stair has opened. Press <strong>New Run</strong> to begin.",
+    "🪜",
+    "portrait-dungeon"
+  );
+  updateUI();
+}
+
+function startNewRunFlow() {
+  game = {
+    mode: "menu",
+    player: null,
+    enemy: null,
+    defending: false,
+    forcedFight: false,
+    rumorCompanion: null,
+    lastRumor: null,
+    bossPhase: 1
+  };
+
+  clearChoices();
+  resetEnemy();
+
+  setScene(
+    "New Run",
+    "Setup",
+    "Name your adventurer, then choose a class.",
+    "🜃",
+    "portrait-dungeon"
+  );
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = "Nameless";
+  input.placeholder = "Adventurer name";
+  input.style.width = "100%";
+  input.style.marginBottom = "1rem";
+  input.style.padding = "0.85rem";
+  input.style.borderRadius = "12px";
+  input.style.border = "1px solid #30303d";
+  input.style.background = "#111118";
+  input.style.color = "#ece7dc";
+
+  els.choices.appendChild(input);
+
+  Object.entries(CLASS_DATA).forEach(([className, data]) => {
+    addChoice(
+      `${data.glyph} ${className}`,
+      `${data.desc} | HP ${data.maxHp} | Skill: ${data.skill}`,
+      () => {
+        const name = input.value.trim() || "Nameless";
+        game.player = makePlayer(name, className);
+        renderStartingBonus();
+      }
+    );
+  });
+
+  updateUI();
+}
+
+function renderStartingBonus() {
+  game.mode = "setup";
+  clearChoices();
+  resetEnemy();
+
+  setScene(
+    "Choose Starting Bonus",
+    "Setup",
+    "Pick one starting edge.",
+    "🎒",
+    "portrait-town"
+  );
+
+  addChoice("Random Relic", "Start with a relic.", () => {
+    const relic = randomRelic();
+    if (relic) {
+      game.player.relics.push(relic);
+      addLog(`You start with relic: ${relic.name}.`);
+    }
+    renderTown();
+  });
+
+  addChoice("Random Companion", "Start with a companion.", () => {
+    const companion = randomCompanion();
+    if (companion) {
+      game.player.companion = companion;
+      addLog(`${companion.name} joins you.`);
+    }
+    renderTown();
+  });
+
+  addChoice("Extra Supplies", "+2 Potion, +1 Bomb, +25 gold.", () => {
+    game.player.inventory.Potion += 2;
+    game.player.inventory.Bomb += 1;
+    game.player.gold += 25;
+    addLog("You pack extra supplies.");
+    renderTown();
+  });
+
+  updateUI();
+}
+
+function renderTown() {
+  game.mode = "town";
+  resetEnemy();
+  clearChoices();
+
+  const rumorLine = game.lastRumor
+    ? `<br><br><span class="accent">Latest rumor:</span> ${game.lastRumor}`
+    : "";
+
+  setScene(
+    "Ashen Town",
+    "Town",
+    `The town still holds: steel, candles, ale, and people with just enough poor judgment to follow you.${rumorLine}`,
+    "🏘",
+    "portrait-town"
+  );
+
+  addChoice("Descend", "Head toward the stair.", renderPathChoice);
+  addChoice("Blacksmith", "Buy weapons and armor.", renderBlacksmith);
+  addChoice("Apothecary", "Buy healing and utility items.", renderApothecary);
+  addChoice("Tavern", "Rest, gamble, and hear rumors.", renderTavern);
+  addChoice("Chapel", "Seek blessing or make a darker bargain.", renderChapel);
+
+  updateUI();
+}
+
+function renderBlacksmith() {
+  clearChoices();
+  setScene(
+    "Blacksmith",
+    "Town",
+    "Steel for sale. Buy carefully.",
+    "⚒",
+    "portrait-town"
+  );
+
+  Object.entries(WEAPONS).forEach(([name, data]) => {
+    if (data.price <= 0) return;
+
+    const equipped = game.player.weapon === name;
+    addChoice(
+      name,
+      `${data.min}-${data.max} dmg${data.mod ? ` | ${data.mod}` : ""} | ${data.price} gold${equipped ? " | equipped" : ""}`,
+      () => {
+        if (equipped) {
+          addLog(`${name} is already equipped.`);
+          renderBlacksmith();
+          return;
+        }
+        if (game.player.gold < data.price) {
+          addLog("Not enough gold.");
+          renderBlacksmith();
+          return;
+        }
+        game.player.gold -= data.price;
+        game.player.weapon = name;
+        addLog(`You equip ${name}.`);
+        renderBlacksmith();
+      }
+    );
+  });
+
+  Object.entries(ARMORS).forEach(([name, data]) => {
+    if (data.price <= 0) return;
+
+    const equipped = game.player.armor === name;
+    addChoice(
+      name,
+      `+${data.defense} defense | ${data.price} gold${equipped ? " | equipped" : ""}`,
+      () => {
+        if (equipped) {
+          addLog(`${name} is already equipped.`);
+          renderBlacksmith();
+          return;
+        }
+        if (game.player.gold < data.price) {
+          addLog("Not enough gold.");
+          renderBlacksmith();
+          return;
+        }
+        game.player.gold -= data.price;
+        game.player.armor = name;
+        addLog(`You equip ${name}.`);
+        renderBlacksmith();
+      }
+    );
+  });
+
+  addChoice("Back", "Return to town.", renderTown);
+  updateUI();
+}
+
+function renderApothecary() {
+  clearChoices();
+  setScene(
+    "Apothecary",
+    "Town",
+    "Bottles, powders, and practical solutions to violent problems.",
+    "🧪",
+    "portrait-town"
+  );
+
+  Object.entries(ITEMS).forEach(([name, data]) => {
+    let desc = "";
+    if (data.type === "heal") desc = `Heals ${data.heal}`;
+    else if (data.type === "bomb") desc = "Deals damage";
+    else if (data.type === "escape") desc = "Escape a non-forced fight";
+    else desc = `+${data.hpGain} max HP and heal`;
+
+    addChoice(
+      name,
+      `${desc} | ${data.price} gold`,
+      () => {
+        if (game.player.gold < data.price) {
+          addLog("Not enough gold.");
+          renderApothecary();
+          return;
+        }
+        game.player.gold -= data.price;
+        game.player.inventory[name] += 1;
+        addLog(`Bought ${name}.`);
+        renderApothecary();
+      }
+    );
+  });
+
+  addChoice("Back", "Return to town.", renderTown);
+  updateUI();
+}
+
+function resolveRumor() {
+  const rumor = RUMORS[randInt(0, RUMORS.length - 1)];
+  game.lastRumor = rumor;
+  addLog(`Rumor: ${rumor}`);
+
+  if (chance(0.45)) {
+    const companion = randomCompanion();
+    if (companion) {
+      game.rumorCompanion = companion;
+      addLog(`${companion.name} can be recruited at the tavern.`);
+    }
+  } else {
+    game.rumorCompanion = null;
+  }
+}
+
+function renderTavern() {
+  clearChoices();
+
+  const recruitLine = game.rumorCompanion
+    ? `<br><br><span class="accent">${game.rumorCompanion.name}</span> is available for recruitment.`
+    : "";
+
+  setScene(
+    "Tavern",
+    "Town",
+    `Warm food, stale air, and people pretending not to think about the stair.${recruitLine}`,
+    "🍺",
+    "portrait-town"
+  );
+
+  addChoice("Meal and Rest", "Recover 20 HP for 10 gold.", () => {
+    if (game.player.gold < 10) {
+      addLog("Not enough gold.");
+    } else {
+      game.player.gold -= 10;
+      const healed = healPlayer(20);
+      addLog(`You recover ${healed} HP.`);
+    }
+    renderTavern();
+  });
+
+  addChoice("Gamble", "Roll dice against the house.", () => {
+    const raw = prompt("Bet how much gold?", "10");
+    if (!raw) {
+      renderTavern();
+      return;
+    }
+
+    const bet = Number(raw);
+    if (!Number.isInteger(bet) || bet <= 0) {
+      addLog("That is not a valid bet.");
+      renderTavern();
+      return;
+    }
+
+    if (bet > game.player.gold) {
+      addLog("Not enough gold.");
+      renderTavern();
+      return;
+    }
+
+    const playerRoll = randInt(1, 6);
+    const houseRoll = randInt(1, 6);
+    addLog(`You roll ${playerRoll}. The house rolls ${houseRoll}.`);
+
+    if (playerRoll > houseRoll) {
+      game.player.gold += bet;
+      addLog(`You win ${bet} gold.`);
+    } else if (playerRoll < houseRoll) {
+      game.player.gold -= bet;
+      addLog(`You lose ${bet} gold.`);
+    } else {
+      addLog("Tie.");
+    }
+
+    renderTavern();
+  });
+
+  addChoice("Hear Rumors", "Sometimes information. Sometimes company.", () => {
+    resolveRumor();
+    renderTavern();
+  });
+
+  if (game.rumorCompanion) {
+    addChoice(
+      `Recruit ${game.rumorCompanion.name}`,
+      game.rumorCompanion.desc,
+      () => {
+        game.player.companion = deepCopy(game.rumorCompanion);
+        addLog(`${game.rumorCompanion.name} joins you from the tavern.`);
+        game.rumorCompanion = null;
+        renderTavern();
+      }
+    );
+  }
+
+  addChoice("Back", "Return to town.", renderTown);
+  updateUI();
+}
+
+function renderChapel() {
+  clearChoices();
+  setScene(
+    "Chapel",
+    "Town",
+    "Candles, stone, and a silence that either comforts or evaluates you.",
+    "🕯",
+    "portrait-town"
+  );
+
+  addChoice("Donate", "15 gold. Gain blessing and recover some HP.", () => {
+    if (game.player.gold < 15) {
+      addLog("Not enough gold.");
+      renderChapel();
+      return;
+    }
+
+    game.player.gold -= 15;
+    game.player.flags.blessed = true;
+    game.player.flags.cursed = false;
+    const healed = healPlayer(12);
+    addLog(`You are blessed and recover ${healed} HP.`);
+    renderChapel();
+  });
+
+  addChoice("Blood Oath", "Once only. Lose 3 max HP, gain 2 strength.", () => {
+    if (game.player.flags.bloodOath) {
+      addLog("You have already taken the blood oath.");
+      renderChapel();
+      return;
+    }
+
+    game.player.flags.bloodOath = true;
+    game.player.maxHp = Math.max(10, game.player.maxHp - 3);
+    game.player.hp = Math.min(game.player.hp, game.player.maxHp);
+    game.player.strength += 2;
+    addLog("You lose 3 max HP and gain 2 strength.");
+    renderChapel();
+  });
+
+  addChoice("Cleanse Curse", "18 gold to remove curse.", () => {
+    if (game.player.gold < 18) {
+      addLog("Not enough gold.");
+      renderChapel();
+      return;
+    }
+
+    game.player.gold -= 18;
+    game.player.flags.cursed = false;
+    addLog("Your curse is lifted.");
+    renderChapel();
+  });
+
+  addChoice("Back", "Return to town.", renderTown);
+  updateUI();
+}
+
+function renderPathChoice() {
+  game.mode = "path";
+  resetEnemy();
+  clearChoices();
+
+  setScene(
+    `Depth ${game.player.depth + 1}`,
+    "Dungeon",
+    "Choose your next room.",
+    "🪜",
+    "portrait-dungeon"
+  );
+
+  addChoice("Fight", "A standard encounter.", () => enterRoom("fight"));
+  addChoice("Event", "Shrine, treasure, rumor, or stranger.", () => enterRoom("event"));
+  addChoice("Elite", "More dangerous, better rewards.", () => enterRoom("elite"));
+  addChoice("Rest", "Recover some HP.", () => enterRoom("rest"));
+  addChoice("Return to Town", "Play it safe and head back.", renderTown);
+
+  updateUI();
+}
+
+// ======================================================
+// EVENTS
+// ======================================================
+function enterRoom(type) {
+  const nextDepth = game.player.depth + 1;
+
+  if (nextDepth === 5 || nextDepth === 9) {
+    game.player.depth = nextDepth;
+    startCombat(makeMiniboss(nextDepth), true);
+    return;
+  }
+
+  if (nextDepth >= 10) {
+    game.player.depth = nextDepth;
+    startBossFight();
+    return;
+  }
+
+  game.player.depth = nextDepth;
+
+  if (type === "fight") {
+    startCombat(makeEnemy(nextDepth), false);
+    return;
+  }
+
+  if (type === "elite") {
+    startCombat(makeElite(nextDepth), false);
+    return;
+  }
+
+  if (type === "rest") {
+    const amount = randInt(16, 24) + (game.player.flags.blessed ? 4 : 0);
+    const healed = healPlayer(amount);
+    addLog(`You rest and recover ${healed} HP.`);
+    renderPathChoice();
+    return;
+  }
+
+  resolveEvent();
+}
+
+function resolveEvent() {
+  const roll = randInt(1, 100);
+
+  if (roll <= 24) {
+    const gold = gainGold(randInt(24, 42) + game.player.depth * 2);
+    addLog(`You find ${gold} gold.`);
+    if (chance(0.55)) {
+      const itemName = ["Potion", "Bomb", "Hi-Potion"][randInt(0, 2)];
+      game.player.inventory[itemName] += 1;
+      addLog(`You also find: ${itemName}.`);
+    }
+    renderPathChoice();
+    return;
+  }
+
+  if (roll <= 46) {
+    renderShrineEvent();
+    return;
+  }
+
+  if (roll <= 62) {
+    renderScoutEvent();
+    return;
+  }
+
+  if (roll <= 78) {
+    renderCompanionEvent();
+    return;
+  }
+
+  if (roll <= 90) {
+    renderMerchantEvent();
+    return;
+  }
+
+  const relic = randomRelic();
+  if (relic) {
+    game.player.relics.push(relic);
+    addLog(`You discover relic: ${relic.name}.`);
+  } else {
+    const gold = gainGold(35);
+    addLog(`The pedestal is empty, but you find ${gold} gold nearby.`);
+  }
+
+  renderPathChoice();
+}
+
+function renderShrineEvent() {
+  clearChoices();
+  setScene(
+    "Shrine",
+    "Event",
+    "A small shrine waits in the dust.",
+    "⛩",
+    "portrait-dungeon"
+  );
+
+  addChoice("Pray", "Chance to be blessed or recover HP.", () => {
+    if (chance(0.75)) {
+      game.player.flags.blessed = true;
+      game.player.flags.cursed = false;
+      const healed = healPlayer(12);
+      addLog(`You are blessed and recover ${healed} HP.`);
+    } else {
+      const healed = healPlayer(8);
+      addLog(`You recover ${healed} HP.`);
+    }
+    renderPathChoice();
+  });
+
+  addChoice("Steal Offering", "Gain gold, become cursed.", () => {
+    const gold = gainGold(randInt(24, 44));
+    game.player.flags.cursed = true;
+    game.player.flags.blessed = false;
+    addLog(`You steal ${gold} gold and become cursed.`);
+    renderPathChoice();
+  });
+
+  addChoice("Leave", "Move on.", renderPathChoice);
+  updateUI();
+}
+
+function renderScoutEvent() {
+  clearChoices();
+  setScene(
+    "Wounded Scout",
+    "Event",
+    "A scout from town is in bad shape.",
+    "🏹",
+    "portrait-dungeon"
+  );
+
+  addChoice("Give Potion", "Help with a Potion.", () => {
+    if (game.player.inventory.Potion <= 0) {
+      addLog("You have no Potion.");
+      renderPathChoice();
+      return;
+    }
+
+    game.player.inventory.Potion -= 1;
+    game.player.flags.rescuedScout = true;
+    const gold = gainGold(30);
+    addLog(`You help the scout and gain ${gold} gold.`);
+
+    if (chance(0.25)) {
+      const relic = randomRelic();
+      if (relic) {
+        game.player.relics.push(relic);
+        addLog(`The scout gives you relic: ${relic.name}.`);
+      }
+    }
+
+    renderPathChoice();
+  });
+
+  addChoice("Help Them Back", "No item needed.", () => {
+    game.player.flags.rescuedScout = true;
+    const healed = healPlayer(10);
+    addLog(`You help the scout back and recover ${healed} HP.`);
+    renderPathChoice();
+  });
+
+  addChoice("Search Their Bag", "Take gold, become cursed.", () => {
+    const gold = gainGold(randInt(18, 28));
+    game.player.flags.cursed = true;
+    addLog(`You take ${gold} gold and become cursed.`);
+    renderPathChoice();
+  });
+
+  addChoice("Leave", "Walk on.", renderPathChoice);
+  updateUI();
+}
+
+function renderCompanionEvent() {
+  const companion = randomCompanion();
+  if (!companion) {
+    addLog("No one suitable appears.");
+    renderPathChoice();
+    return;
+  }
+
+  clearChoices();
+  setScene(
+    "Wanderer",
+    "Event",
+    `${companion.name} is willing to join you.`,
+    companion.glyph,
+    "portrait-town"
+  );
+
+  addChoice("Recruit", companion.desc, () => {
+    game.player.companion = companion;
+    addLog(`${companion.name} joins you.`);
+    renderPathChoice();
+  });
+
+  addChoice("Decline", "Continue alone.", renderPathChoice);
+  updateUI();
+}
+
+function renderMerchantEvent() {
+  clearChoices();
+  setScene(
+    "Shadow Peddler",
+    "Event",
+    "A traveling merchant offers a few practical sins.",
+    "🧳",
+    "portrait-town"
+  );
+
+  addChoice("Buy Potion", "14 gold.", () => quickBuy("Potion", 14));
+  addChoice("Buy Bomb", "20 gold.", () => quickBuy("Bomb", 20));
+  addChoice("Buy Smoke Bomb", "18 gold.", () => quickBuy("Smoke Bomb", 18));
+  addChoice("Buy Hi-Potion", "26 gold.", () => quickBuy("Hi-Potion", 26));
+  addChoice("Leave", "Move on.", renderPathChoice);
+  updateUI();
+}
+
+function quickBuy(itemName, cost) {
+  if (game.player.gold < cost) {
+    addLog("Not enough gold.");
+  } else {
+    game.player.gold -= cost;
+    game.player.inventory[itemName] += 1;
+    addLog(`Bought ${itemName}.`);
+  }
+  renderPathChoice();
+}
+
 // ======================================================
 // COMBAT
 // ======================================================
-function startCombat(enemy, forced) {
+function startCombat(enemy, forcedFight) {
   game.mode = "combat";
   game.enemy = enemy;
   game.defending = false;
-  game.forcedFight = forced;
-
-  let tag = "Combat";
-  if (enemy.miniboss) tag = "Miniboss";
-  else if (enemy.elite) tag = "Elite";
-
-  setScene(
-    enemy.name,
-    tag,
-    `The fight begins.`,
-    enemy.glyph
-  );
+  game.forcedFight = forcedFight;
 
   addLog(`Combat begins: ${enemy.name}.`);
-  showCombat();
+  renderCombat();
 }
 
 function startBossFight() {
   game.mode = "combat";
   game.bossPhase = 1;
+  game.defending = false;
   game.forcedFight = true;
   game.enemy = {
     name: BOSS.name,
@@ -1266,52 +1394,77 @@ function startBossFight() {
     statuses: makeStatuses()
   };
 
-  setScene(
-    "The Ashen Throne",
-    "Boss",
-    "The king rises. Slowly. Which somehow makes it worse.",
-    BOSS.glyph
-  );
-
   addLog("Boss fight begins.");
-  showCombat();
+  renderCombat();
 }
 
-function showCombat() {
+function renderCombat() {
   clearChoices();
+  updateUI();
 
   const enemy = game.enemy;
-  const enemyType = enemy.miniboss ? "Miniboss" : enemy.elite ? "Elite" : "Enemy";
+  const tag = enemy.miniboss ? "Miniboss" : enemy.elite ? "Elite" : "Combat";
+  const sceneClass = enemy.name === BOSS.name ? "portrait-boss" : "portrait-enemy-theme";
+
   setScene(
     enemy.name,
-    enemyType,
-    `Choose your action. HP and statuses now matter enough to stop pretending otherwise.`,
-    enemy.glyph
+    tag,
+    "Choose your action.",
+    enemy.glyph,
+    sceneClass
   );
 
   addChoice("Attack", "Make a standard attack.", playerAttack);
-  addChoice("Skill", `${game.player.skill}${game.player.skillCd > 0 ? ` | cooldown ${game.player.skillCd}` : ""}`, useSkill, game.player.skillCd > 0);
-  addChoice("Item", "Use a consumable.", chooseCombatItem);
-  addChoice("Defend", "Gain guard and reduce incoming damage.", defendTurn);
+  addChoice(
+    "Skill",
+    `${game.player.skill}${game.player.skillCd > 0 ? ` | cooldown ${game.player.skillCd}` : ""}`,
+    playerSkill,
+    game.player.skillCd > 0
+  );
+  addChoice("Item", "Use a consumable.", renderCombatItems);
+  addChoice("Defend", "Gain guard and reduce incoming damage.", playerDefend);
 
   if (!game.forcedFight) {
-    addChoice("Run", "Attempt escape.", attemptRun);
+    addChoice("Run", "Attempt escape.", playerRun);
   }
 
   updateUI();
 }
 
+function renderCombatItems() {
+  clearChoices();
+  setScene(
+    "Use Item",
+    "Combat",
+    "Choose a consumable.",
+    "🎒",
+    "portrait-town"
+  );
+
+  Object.entries(game.player.inventory).forEach(([name, qty]) => {
+    addChoice(
+      name,
+      `x${qty}`,
+      () => useCombatItem(name),
+      qty <= 0
+    );
+  });
+
+  addChoice("Back", "Return to combat menu.", renderCombat);
+  updateUI();
+}
+
 function playerAttack() {
-  runCombatRound(() => {
-    let dmg = randInt(WEAPONS[game.player.weapon].min, WEAPONS[game.player.weapon].max) + game.player.strength + playerCompanionAttackBonus();
-    if (hasRelic("plusAttack")) dmg += 1;
+  executeCombatRound(() => {
+    let dmg = randInt(WEAPONS[game.player.weapon].min, WEAPONS[game.player.weapon].max);
+    dmg += game.player.strength + playerAttackBonus();
+
     if (game.player.flags.cursed) dmg = Math.max(1, dmg - 1);
     if (game.player.statuses.weak > 0) dmg = Math.max(1, dmg - 2);
+    if (game.enemy.statuses.guard > 0) dmg = Math.max(1, dmg - 3);
 
     const crit = chance(playerCritChance());
     if (crit) dmg += randInt(3, 6);
-
-    if (game.enemy.statuses.guard > 0) dmg = Math.max(1, dmg - 3);
 
     game.enemy.hp -= dmg;
     addLog(`You hit ${game.enemy.name} for ${dmg} damage${crit ? " (critical)" : ""}.`);
@@ -1324,8 +1477,8 @@ function playerAttack() {
   });
 }
 
-function useSkill() {
-  runCombatRound(() => {
+function playerSkill() {
+  executeCombatRound(() => {
     if (game.player.skillCd > 0) {
       addLog("Your skill is not ready.");
       return false;
@@ -1378,135 +1531,123 @@ function useSkill() {
   });
 }
 
-function defendTurn() {
-  runCombatRound(() => {
+function playerDefend() {
+  executeCombatRound(() => {
     applyStatus(game.player, "guard", 1);
     game.defending = true;
     addLog("You defend and gain guard.");
   });
 }
 
-function attemptRun() {
+function playerRun() {
   if (game.forcedFight) {
     addLog("There is nowhere to run.");
-    showCombat();
+    renderCombat();
     return;
   }
+
   if (chance(0.65)) {
     addLog(`You escape from ${game.enemy.name}.`);
     resetEnemy();
-    showPathChoice();
+    renderPathChoice();
     return;
   }
+
   addLog("You fail to escape.");
-  enemyPhase();
-}
-
-function chooseCombatItem() {
-  clearChoices();
-  setScene("Use Item", "Combat", "Choose a consumable.", "🎒");
-
-  Object.entries(game.player.inventory).forEach(([itemName, qty]) => {
-    addChoice(
-      itemName,
-      `x${qty}`,
-      () => useCombatItem(itemName),
-      qty <= 0
-    );
-  });
-
-  addChoice("Back", "Return to combat menu.", showCombat);
-  updateUI();
+  enemyTurnPhase();
 }
 
 function useCombatItem(itemName) {
   if (game.player.inventory[itemName] <= 0) {
     addLog(`You do not have ${itemName}.`);
-    showCombat();
+    renderCombat();
     return;
   }
 
-  runCombatRound(() => {
+  executeCombatRound(() => {
     const item = ITEMS[itemName];
     game.player.inventory[itemName] -= 1;
 
     if (item.type === "heal") {
       const healed = healPlayer(item.heal);
       addLog(`You use ${itemName} and recover ${healed} HP.`);
-      return;
+      return true;
     }
 
     if (item.type === "bomb") {
       const dmg = randInt(item.damageMin, item.damageMax);
       game.enemy.hp -= dmg;
       addLog(`You throw ${itemName} for ${dmg} damage.`);
-      return;
+      return true;
     }
 
     if (item.type === "escape") {
       if (game.forcedFight) {
         addLog("The smoke helps, but you cannot escape this fight.");
-      } else {
-        addLog("You vanish in smoke and escape.");
-        resetEnemy();
-        showPathChoice();
-        throw new Error("__escape__");
+        return true;
       }
-      return;
+      addLog("You vanish in smoke and escape.");
+      resetEnemy();
+      renderPathChoice();
+      return "escaped";
     }
 
     if (item.type === "elixir") {
       game.player.maxHp += item.hpGain;
       const healed = healPlayer(item.heal);
       addLog(`You gain +${item.hpGain} max HP and recover ${healed} HP.`);
+      return true;
     }
+
+    return true;
   });
 }
 
-function runCombatRound(playerAction) {
-  try {
-    const playerTicks = tickStatuses(game.player, false);
-    playerTicks.forEach(m => addLog(m));
-    if (game.player.hp <= 0) {
-      handleDeath();
-      return;
-    }
+function executeCombatRound(playerAction) {
+  const playerTickMessages = tickStatuses(game.player, false);
+  playerTickMessages.forEach(addLog);
 
-    const result = playerAction();
-    if (result === false) {
-      showCombat();
-      return;
-    }
-
-    if (game.enemy && game.enemy.hp <= 0) {
-      handleVictory();
-      return;
-    }
-
-    companionPhase();
-    if (game.enemy && game.enemy.hp <= 0) {
-      handleVictory();
-      return;
-    }
-
-    const enemyTicks = tickStatuses(game.enemy, true);
-    enemyTicks.forEach(m => addLog(m));
-    if (game.enemy && game.enemy.hp <= 0) {
-      handleVictory();
-      return;
-    }
-
-    enemyPhase();
-  } catch (err) {
-    if (err.message !== "__escape__") {
-      console.error(err);
-      addLog("Something went wrong in combat.");
-      showCombat();
-    }
+  if (game.player.hp <= 0) {
+    renderDeath();
+    return;
   }
+
+  const actionResult = playerAction();
+
+  if (actionResult === false) {
+    renderCombat();
+    return;
+  }
+
+  if (actionResult === "escaped") {
+    updateUI();
+    return;
+  }
+
+  if (game.enemy.hp <= 0) {
+    handleEnemyDefeat();
+    return;
+  }
+
+  companionTurnPhase();
+
+  if (game.enemy.hp <= 0) {
+    handleEnemyDefeat();
+    return;
+  }
+
+  const enemyTickMessages = tickStatuses(game.enemy, true);
+  enemyTickMessages.forEach(addLog);
+
+  if (game.enemy.hp <= 0) {
+    handleEnemyDefeat();
+    return;
+  }
+
+  enemyTurnPhase();
 }
 
-function companionPhase() {
+function companionTurnPhase() {
   if (!game.player.companion || !game.enemy) return;
 
   const c = game.player.companion;
@@ -1516,11 +1657,23 @@ function companionPhase() {
 
   if (c.bonus === "heal" && chance(0.30)) {
     const healed = healPlayer(4);
-    if (healed > 0) addLog(`${c.name} restores ${healed} HP to you.`);
+    if (healed > 0) {
+      addLog(`${c.name} restores ${healed} HP to you.`);
+    }
   }
 }
 
-function enemyPhase() {
+function damagePlayer(raw) {
+  if (game.player.companion?.bonus === "dodge" && chance(0.10)) {
+    return 0;
+  }
+
+  const reduced = Math.max(1, raw - playerDefense());
+  game.player.hp -= reduced;
+  return reduced;
+}
+
+function enemyTurnPhase() {
   if (!game.enemy) return;
 
   const e = game.enemy;
@@ -1528,7 +1681,7 @@ function enemyPhase() {
   if (e.ai === "guarder" && e.hp < Math.floor(e.maxHp / 2) && chance(0.25)) {
     applyStatus(e, "guard", 1);
     addLog(`${e.name} braces and gains guard.`);
-    endRound();
+    finishRound();
     return;
   }
 
@@ -1537,7 +1690,7 @@ function enemyPhase() {
     const taken = damagePlayer(raw);
     applyStatus(game.player, "burn", 2);
     addLog(`${e.name} scorches you for ${taken} damage and inflicts burn.`);
-    endRound();
+    finishRound();
     return;
   }
 
@@ -1546,7 +1699,7 @@ function enemyPhase() {
     const taken = damagePlayer(raw);
     applyStatus(game.player, "bleed", 2);
     addLog(`${e.name} cuts you for ${taken} damage and inflicts bleed.`);
-    endRound();
+    finishRound();
     return;
   }
 
@@ -1555,7 +1708,7 @@ function enemyPhase() {
     const taken = damagePlayer(raw);
     applyStatus(game.player, "weak", 2);
     addLog(`${e.name} strikes for ${taken} damage and inflicts weak.`);
-    endRound();
+    finishRound();
     return;
   }
 
@@ -1576,6 +1729,7 @@ function enemyPhase() {
 
   let dmg = randInt(e.atkMin, e.atkMax);
   if (e.statuses.weak > 0) dmg = Math.max(1, dmg - 2);
+
   const crit = chance(e.elite ? 0.12 : 0.08);
   if (crit) dmg += randInt(2, 4);
 
@@ -1586,19 +1740,10 @@ function enemyPhase() {
     addLog(`${e.name} hits you for ${taken} damage${crit ? " (critical)" : ""}.`);
   }
 
-  endRound();
+  finishRound();
 }
 
-function damagePlayer(raw) {
-  if (game.player.companion?.bonus === "dodge" && chance(0.10)) {
-    return 0;
-  }
-  const reduced = Math.max(1, raw - playerDefense());
-  game.player.hp -= reduced;
-  return reduced;
-}
-
-function endRound() {
+function finishRound() {
   if (game.defending && hasRelic("thornsGuard") && game.enemy && game.enemy.hp > 0) {
     game.enemy.hp -= 2;
     addLog("Mirror Nail reflects 2 damage.");
@@ -1611,21 +1756,41 @@ function endRound() {
   }
 
   if (game.enemy && game.enemy.hp <= 0) {
-    handleVictory();
+    handleEnemyDefeat();
     return;
   }
 
   if (game.player.hp <= 0) {
-    handleDeath();
+    renderDeath();
     return;
   }
 
-  updateUI();
-  showCombat();
+  renderCombat();
 }
 
-function handleVictory() {
+function handleEnemyDefeat() {
   if (!game.enemy) return;
+
+  if (game.enemy.name === BOSS.name && game.bossPhase === 1) {
+    game.bossPhase = 2;
+    game.enemy = {
+      name: BOSS.name,
+      glyph: BOSS.glyph,
+      hp: BOSS.phase2Hp,
+      maxHp: BOSS.phase2Hp,
+      atkMin: BOSS.atk2[0],
+      atkMax: BOSS.atk2[1],
+      gold: BOSS.gold,
+      xp: BOSS.xp,
+      ai: "boss2",
+      elite: true,
+      miniboss: true,
+      statuses: makeStatuses()
+    };
+    addLog("The king collapses... then rises again in ash.");
+    renderCombat();
+    return;
+  }
 
   const enemy = game.enemy;
   const gold = gainGold(enemy.gold);
@@ -1660,15 +1825,15 @@ function handleVictory() {
   }
 
   if (enemy.name === BOSS.name) {
-    handleBossVictory();
+    renderVictory();
     return;
   }
 
   resetEnemy();
-  showPathChoice();
+  renderPathChoice();
 }
 
-function handleBossVictory() {
+function renderVictory() {
   clearChoices();
   resetEnemy();
 
@@ -1685,68 +1850,34 @@ function handleBossVictory() {
     "Victory",
     "Ending",
     `You defeat the King Beneath Ash.<br><br><span class="accent">${ending}</span>`,
-    "👑"
+    "👑",
+    "portrait-boss"
   );
 
-  addChoice("Return to Town", "The stair is quiet, for now.", showTown);
+  addChoice("Return to Town", "The stair is quiet, for now.", renderTown);
   updateUI();
 }
 
-function handleDeath() {
+function renderDeath() {
   clearChoices();
   resetEnemy();
   game.mode = "dead";
+
   setScene(
     "You Died",
     "Defeat",
-    `${game.player.name} the ${game.player.className} fell at depth ${game.player.depth}.`,
-    "☠"
+    game.player
+      ? `${game.player.name} the ${game.player.className} fell at depth ${game.player.depth}.`
+      : "Your run has ended.",
+    "☠",
+    "portrait-enemy-theme"
   );
+
   addLog("You died.");
   addChoice("New Run", "Try again.", startNewRunFlow);
   addChoice("Load Save", "Return from a prior save.", loadGame);
   updateUI();
 }
-
-// ======================================================
-// BOSS PHASES
-// ======================================================
-function maybeAdvanceBossPhase() {
-  if (!game.enemy || game.enemy.name !== BOSS.name) return false;
-  if (game.bossPhase === 1 && game.enemy.hp <= 0) {
-    game.bossPhase = 2;
-    game.enemy = {
-      name: BOSS.name,
-      glyph: BOSS.glyph,
-      hp: BOSS.phase2Hp,
-      maxHp: BOSS.phase2Hp,
-      atkMin: BOSS.atk2[0],
-      atkMax: BOSS.atk2[1],
-      gold: BOSS.gold,
-      xp: BOSS.xp,
-      ai: "boss2",
-      elite: true,
-      miniboss: true,
-      statuses: makeStatuses()
-    };
-    addLog("The king collapses... then rises again in ash.");
-    showCombat();
-    return true;
-  }
-  return false;
-}
-
-// monkey-patch victory handler entry for boss phase
-const originalHandleVictory = handleVictory;
-handleVictory = function wrappedHandleVictory() {
-  if (game.enemy && game.enemy.name === BOSS.name && game.bossPhase === 1 && game.enemy.hp <= 0) {
-    if (maybeAdvanceBossPhase()) {
-      updateUI();
-      return;
-    }
-  }
-  originalHandleVictory();
-};
 
 // ======================================================
 // GLOBAL BUTTONS
@@ -1756,20 +1887,11 @@ els.saveBtn.addEventListener("click", saveGame);
 els.loadBtn.addEventListener("click", loadGame);
 els.clearLogBtn.addEventListener("click", clearLog);
 els.townBtn.addEventListener("click", () => {
-  if (game.player) showTown();
+  if (game.player) renderTown();
 });
 els.statsBtn.addEventListener("click", updateUI);
 
 // ======================================================
-// INITIAL
+// INIT
 // ======================================================
-(function init() {
-  setScene(
-    "Black Stair: Breaking Ground",
-    "Menu",
-    "The black stair has opened. Press <strong>New Run</strong> to begin.",
-    "🪜"
-  );
-  clearChoices();
-  updateUI();
-})();
+renderMainMenu();
