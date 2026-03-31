@@ -1,20 +1,21 @@
 :root {
-  --bg: #0a0a0d;
-  --panel: #14141a;
-  --panel-2: #1b1b23;
-  --border: #2c2c38;
+  --bg: #0b0b0f;
+  --bg-2: #111118;
+  --panel: rgba(22, 22, 30, 0.94);
+  --panel-2: rgba(29, 29, 39, 0.94);
+  --border: #30303d;
+  --border-soft: rgba(255, 255, 255, 0.06);
   --text: #ece7dc;
-  --muted: #a7a29a;
+  --muted: #aba59b;
   --accent: #b08a57;
-  --accent-2: #7a2e2e;
-  --hp: #8f2f2f;
-  --xp: #8a7a33;
-  --enemy: #6f2a2a;
+  --accent-2: #6e2a2a;
+  --good: #8fba8f;
+  --warn: #c5a861;
+  --bad: #d48787;
+  --hp: #9a3737;
+  --xp: #a38f39;
+  --enemy: #7a2c2c;
   --shadow: rgba(0, 0, 0, 0.45);
-  --button: #23232d;
-  --button-hover: #31313d;
-  --good: #5c8a5c;
-  --warn: #9c7a3b;
 }
 
 * {
@@ -25,35 +26,51 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(circle at top, #1b1b22 0%, #0a0a0d 45%, #060608 100%);
   color: var(--text);
   font-family: Georgia, "Times New Roman", serif;
+  background:
+    radial-gradient(circle at top, rgba(60, 60, 82, 0.22), transparent 28%),
+    radial-gradient(circle at bottom, rgba(80, 22, 22, 0.16), transparent 30%),
+    linear-gradient(180deg, #14141b 0%, #09090c 45%, #060608 100%);
 }
 
-body {
-  min-height: 100vh;
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+button,
+input {
+  font: inherit;
 }
 
 button {
-  font: inherit;
   color: var(--text);
-  background: linear-gradient(180deg, #2a2a35 0%, #1d1d26 100%);
+  background: linear-gradient(180deg, #2f2f3b 0%, #20202a 100%);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.7rem 1rem;
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
   cursor: pointer;
+  box-shadow: 0 6px 14px var(--shadow);
   transition:
     transform 0.08s ease,
+    border-color 0.15s ease,
     background 0.15s ease,
-    border-color 0.15s ease;
-  box-shadow: 0 4px 10px var(--shadow);
+    box-shadow 0.15s ease;
 }
 
 button:hover {
-  background: linear-gradient(180deg, #373744 0%, #262630 100%);
-  border-color: #4a4a5b;
   transform: translateY(-1px);
+  background: linear-gradient(180deg, #3a3a48 0%, #282833 100%);
+  border-color: #4b4b5d;
+  box-shadow: 0 10px 18px var(--shadow);
 }
 
 button:active {
@@ -68,7 +85,7 @@ button:disabled {
 
 .small-btn {
   padding: 0.45rem 0.7rem;
-  font-size: 0.9rem;
+  font-size: 0.92rem;
 }
 
 .hidden {
@@ -88,21 +105,23 @@ button:disabled {
   align-items: center;
   margin-bottom: 1rem;
   padding: 1rem 1.2rem;
-  background: linear-gradient(180deg, rgba(31, 31, 40, 0.92), rgba(18, 18, 24, 0.94));
+  border-radius: 18px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 12px 28px var(--shadow);
+  background:
+    linear-gradient(180deg, rgba(33, 33, 44, 0.96), rgba(18, 18, 24, 0.98));
+  box-shadow: 0 14px 28px var(--shadow);
 }
 
 .title-block h1 {
   margin: 0;
-  font-size: 1.9rem;
+  font-size: 2rem;
   letter-spacing: 0.04em;
   color: #f0e6d2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .subtitle {
-  margin: 0.25rem 0 0;
+  margin: 0.3rem 0 0;
   color: var(--muted);
   font-size: 0.98rem;
 }
@@ -127,11 +146,13 @@ button:disabled {
 }
 
 .card {
-  background: linear-gradient(180deg, rgba(28, 28, 36, 0.97), rgba(18, 18, 24, 0.97));
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 18px;
   padding: 1rem;
-  box-shadow: 0 12px 26px var(--shadow);
+  background:
+    linear-gradient(180deg, rgba(29, 29, 39, 0.96), rgba(16, 16, 22, 0.98));
+  box-shadow: 0 14px 28px var(--shadow);
+  backdrop-filter: blur(6px);
 }
 
 .card h2 {
@@ -142,59 +163,122 @@ button:disabled {
 }
 
 .scene-card {
-  min-height: 540px;
+  min-height: 560px;
 }
 
 .log-card {
   min-height: 240px;
 }
 
-.player-card,
-.companion-card,
-.inventory-card,
-.relics-card,
-.statuses-card,
-.town-card {
-  min-height: 120px;
-}
-
 .portrait {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 16px;
   border: 1px solid #3b3b48;
-  border-radius: 14px;
   background:
-    linear-gradient(180deg, rgba(48, 48, 60, 0.95), rgba(24, 24, 32, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    radial-gradient(circle at top, rgba(255,255,255,0.05), transparent 45%),
+    linear-gradient(180deg, rgba(45, 45, 60, 0.95), rgba(20, 20, 28, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 10px 20px rgba(0,0,0,0.25);
   overflow: hidden;
+  position: relative;
+}
+
+.portrait::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.08), transparent 25%, transparent 70%, rgba(255,255,255,0.04));
+  mix-blend-mode: screen;
 }
 
 .portrait span {
-  font-size: 2rem;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.45));
 }
 
 .portrait-player,
 .portrait-companion {
   width: 100%;
-  height: 120px;
+  height: 128px;
   margin-bottom: 0.8rem;
 }
 
-.portrait-scene {
-  width: 220px;
-  height: 220px;
-  border-radius: 18px;
-}
-
-.portrait-scene span {
-  font-size: 4.5rem;
+.portrait-player span,
+.portrait-companion span {
+  font-size: 2.3rem;
 }
 
 .portrait-enemy {
   width: 92px;
   height: 92px;
+}
+
+.portrait-enemy span {
+  font-size: 2.2rem;
+}
+
+.portrait-scene {
+  width: 240px;
+  height: 240px;
+  border-radius: 20px;
+}
+
+.portrait-scene span {
+  font-size: 4.8rem;
+}
+
+.portrait-knight {
+  background:
+    radial-gradient(circle at top, rgba(190, 190, 210, 0.18), transparent 40%),
+    linear-gradient(180deg, #36404d 0%, #1b1f27 100%);
+}
+
+.portrait-rogue {
+  background:
+    radial-gradient(circle at top, rgba(160, 160, 180, 0.12), transparent 40%),
+    linear-gradient(180deg, #2c303a 0%, #171a20 100%);
+}
+
+.portrait-occultist {
+  background:
+    radial-gradient(circle at top, rgba(150, 40, 40, 0.22), transparent 40%),
+    linear-gradient(180deg, #402424 0%, #211314 100%);
+}
+
+.portrait-mage {
+  background:
+    radial-gradient(circle at top, rgba(80, 110, 180, 0.24), transparent 40%),
+    linear-gradient(180deg, #24314b 0%, #141b27 100%);
+}
+
+.portrait-enemy-theme {
+  background:
+    radial-gradient(circle at top, rgba(145, 50, 50, 0.22), transparent 40%),
+    linear-gradient(180deg, #442222 0%, #231414 100%);
+}
+
+.portrait-town {
+  background:
+    radial-gradient(circle at top, rgba(176, 138, 87, 0.18), transparent 40%),
+    linear-gradient(180deg, #3c3427 0%, #211c16 100%);
+}
+
+.portrait-dungeon {
+  background:
+    radial-gradient(circle at top, rgba(120, 120, 140, 0.14), transparent 40%),
+    linear-gradient(180deg, #2c2f3a 0%, #171920 100%);
+}
+
+.portrait-boss {
+  background:
+    radial-gradient(circle at top, rgba(160, 50, 50, 0.24), transparent 40%),
+    linear-gradient(180deg, #4a2424 0%, #231414 100%);
 }
 
 .stat-group {
@@ -207,9 +291,9 @@ button:disabled {
 .stat-line {
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  padding-bottom: 0.25rem;
+  gap: 0.8rem;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 0.28rem;
   font-size: 0.97rem;
 }
 
@@ -228,26 +312,27 @@ button:disabled {
   width: 100%;
   height: 16px;
   background: #0f0f14;
-  border: 1px solid #2a2a35;
+  border: 1px solid #2b2b37;
   border-radius: 999px;
   overflow: hidden;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.35);
 }
 
 .bar-fill {
   height: 100%;
-  transition: width 0.22s ease;
+  transition: width 0.2s ease;
 }
 
 .hp-fill {
-  background: linear-gradient(90deg, #662121 0%, #a43737 100%);
+  background: linear-gradient(90deg, #6e2323 0%, #ab3d3d 100%);
 }
 
 .xp-fill {
-  background: linear-gradient(90deg, #5d5524 0%, #af9d3a 100%);
+  background: linear-gradient(90deg, #685f24 0%, #b6a440 100%);
 }
 
 .enemy-fill {
-  background: linear-gradient(90deg, #5c2020 0%, #8c2f2f 100%);
+  background: linear-gradient(90deg, #662222 0%, #8c3232 100%);
 }
 
 .bar-text {
@@ -257,9 +342,8 @@ button:disabled {
 }
 
 .companion-name {
-  font-size: 1rem;
   font-weight: bold;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.3rem;
 }
 
 .muted {
@@ -270,49 +354,51 @@ button:disabled {
 
 .scene-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  align-items: center;
   margin-bottom: 0.8rem;
 }
 
 .scene-header h2 {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.42rem;
 }
 
 .scene-tag {
-  padding: 0.35rem 0.65rem;
+  padding: 0.35rem 0.7rem;
   border-radius: 999px;
-  background: rgba(176, 138, 87, 0.15);
-  border: 1px solid rgba(176, 138, 87, 0.35);
-  color: #dbc09a;
   font-size: 0.88rem;
   letter-spacing: 0.04em;
+  background: rgba(176, 138, 87, 0.14);
+  border: 1px solid rgba(176, 138, 87, 0.35);
+  color: #dbc09a;
 }
 
 .scene-art {
   display: flex;
   justify-content: center;
-  margin: 0.6rem 0 1rem;
+  margin: 0.7rem 0 1rem;
 }
 
 .art-frame {
   width: 100%;
-  min-height: 250px;
+  min-height: 270px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 20px;
   padding: 1rem;
-  background:
-    linear-gradient(180deg, rgba(21, 21, 28, 0.9), rgba(13, 13, 18, 0.95));
   display: flex;
   align-items: center;
   justify-content: center;
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,0.04), transparent 35%),
+    linear-gradient(180deg, rgba(20, 20, 27, 0.95), rgba(13, 13, 18, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 .main-text {
-  min-height: 84px;
-  line-height: 1.6;
+  min-height: 88px;
+  line-height: 1.65;
   font-size: 1rem;
   color: #efe8db;
   margin-bottom: 1rem;
@@ -320,17 +406,18 @@ button:disabled {
 
 .enemy-panel {
   border: 1px solid rgba(125, 48, 48, 0.45);
-  background: linear-gradient(180deg, rgba(45, 18, 18, 0.42), rgba(25, 14, 14, 0.24));
   border-radius: 14px;
   padding: 0.9rem;
   margin-bottom: 1rem;
+  background:
+    linear-gradient(180deg, rgba(55, 20, 20, 0.36), rgba(22, 12, 12, 0.24));
 }
 
 .enemy-top {
   display: flex;
   justify-content: space-between;
-  align-items: center;
   gap: 1rem;
+  align-items: center;
   margin-bottom: 0.7rem;
 }
 
@@ -346,19 +433,29 @@ button:disabled {
 }
 
 .choice-btn {
-  min-height: 58px;
+  min-height: 60px;
   text-align: left;
-  line-height: 1.3;
-  padding: 0.85rem 0.95rem;
+  line-height: 1.32;
+  padding: 0.9rem 0.95rem;
+  position: relative;
+  overflow: hidden;
 }
 
-.choice-btn .choice-title {
+.choice-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.04), transparent 35%);
+}
+
+.choice-title {
   display: block;
   font-weight: bold;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.18rem;
 }
 
-.choice-btn .choice-sub {
+.choice-sub {
   display: block;
   color: var(--muted);
   font-size: 0.9rem;
@@ -385,9 +482,9 @@ button:disabled {
 .log-entry {
   padding: 0.55rem 0.65rem;
   margin-bottom: 0.45rem;
-  border-left: 3px solid rgba(176, 138, 87, 0.55);
-  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid rgba(176, 138, 87, 0.6);
   border-radius: 8px;
+  background: rgba(255,255,255,0.03);
   font-size: 0.95rem;
   line-height: 1.45;
 }
@@ -400,7 +497,7 @@ button:disabled {
 
 .list-item {
   padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--border-soft);
   border-radius: 10px;
   background: rgba(255,255,255,0.025);
   font-size: 0.94rem;
@@ -423,26 +520,20 @@ button:disabled {
 }
 
 .good {
-  color: #91c291;
+  color: var(--good);
 }
 
 .warn {
-  color: #c9aa63;
+  color: var(--warn);
 }
 
 .bad {
-  color: #d17a7a;
+  color: var(--bad);
 }
 
 @media (max-width: 1180px) {
   .layout {
     grid-template-columns: 1fr;
-  }
-
-  .left-panel,
-  .right-panel,
-  .center-panel {
-    width: 100%;
   }
 
   .choices {
@@ -452,7 +543,7 @@ button:disabled {
 
 @media (max-width: 720px) {
   #app {
-    padding: 0.65rem;
+    padding: 0.7rem;
   }
 
   .topbar {
