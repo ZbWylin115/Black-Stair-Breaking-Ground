@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Black Stair: Breaking Ground</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="title-block">
+        <h1>Black Stair: Breaking Ground</h1>
+        <p class="subtitle">A dark staircase has opened below the town.</p>
+      </div>
+      <div class="topbar-actions">
+        <button id="saveBtn">Save</button>
+        <button id="loadBtn">Load</button>
+        <button id="newRunBtn">New Run</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <!-- LEFT PANEL -->
+      <aside class="panel left-panel">
+        <section class="card player-card">
+          <h2>Adventurer</h2>
+
+          <div class="portrait portrait-player" id="playerPortrait">
+            <span>?</span>
+          </div>
+
+          <div class="stat-group">
+            <div class="stat-line"><strong>Name:</strong> <span id="playerName">-</span></div>
+            <div class="stat-line"><strong>Class:</strong> <span id="playerClass">-</span></div>
+            <div class="stat-line"><strong>Level:</strong> <span id="playerLevel">-</span></div>
+            <div class="stat-line"><strong>Gold:</strong> <span id="playerGold">-</span></div>
+            <div class="stat-line"><strong>Depth:</strong> <span id="playerDepth">-</span></div>
+          </div>
+
+          <div class="resource-block">
+            <label>HP</label>
+            <div class="bar">
+              <div id="hpBar" class="bar-fill hp-fill" style="width: 0%;"></div>
+            </div>
+            <div id="hpText" class="bar-text">0 / 0</div>
+          </div>
+
+          <div class="resource-block">
+            <label>XP</label>
+            <div class="bar">
+              <div id="xpBar" class="bar-fill xp-fill" style="width: 0%;"></div>
+            </div>
+            <div id="xpText" class="bar-text">0 / 0</div>
+          </div>
+
+          <div class="stat-group">
+            <div class="stat-line"><strong>Weapon:</strong> <span id="playerWeapon">-</span></div>
+            <div class="stat-line"><strong>Armor:</strong> <span id="playerArmor">-</span></div>
+            <div class="stat-line"><strong>Skill:</strong> <span id="playerSkill">-</span></div>
+            <div class="stat-line"><strong>Defense:</strong> <span id="playerDefense">-</span></div>
+          </div>
+        </section>
+
+        <section class="card companion-card">
+          <h2>Companion</h2>
+          <div class="portrait portrait-companion" id="companionPortrait">
+            <span>-</span>
+          </div>
+          <div id="companionName" class="companion-name">None</div>
+          <div id="companionDesc" class="muted">No companion recruited.</div>
+        </section>
+      </aside>
+
+      <!-- CENTER PANEL -->
+      <section class="panel center-panel">
+        <section class="card scene-card">
+          <div class="scene-header">
+            <h2 id="sceneTitle">Welcome</h2>
+            <div id="sceneTag" class="scene-tag">Menu</div>
+          </div>
+
+          <div class="scene-art" id="sceneArt">
+            <div class="art-frame">
+              <div class="portrait portrait-scene">
+                <span id="sceneArtGlyph">🜃</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="mainText" class="main-text">
+            Press <strong>New Run</strong> to begin.
+          </div>
+
+          <div id="enemyPanel" class="enemy-panel hidden">
+            <div class="enemy-top">
+              <div>
+                <h3 id="enemyName">Enemy</h3>
+                <div id="enemyStatuses" class="muted">Statuses: none</div>
+              </div>
+              <div class="portrait portrait-enemy" id="enemyPortrait">
+                <span>☠</span>
+              </div>
+            </div>
+
+            <div class="resource-block">
+              <label>Enemy HP</label>
+              <div class="bar">
+                <div id="enemyHpBar" class="bar-fill enemy-fill" style="width: 0%;"></div>
+              </div>
+              <div id="enemyHpText" class="bar-text">0 / 0</div>
+            </div>
+          </div>
+
+          <div id="choices" class="choices"></div>
+        </section>
+
+        <section class="card log-card">
+          <div class="log-header">
+            <h2>Log</h2>
+            <button id="clearLogBtn" class="small-btn">Clear</button>
+          </div>
+          <div id="log" class="log"></div>
+        </section>
+      </section>
+
+      <!-- RIGHT PANEL -->
+      <aside class="panel right-panel">
+        <section class="card inventory-card">
+          <h2>Inventory</h2>
+          <div id="inventoryList" class="list-block"></div>
+        </section>
+
+        <section class="card relics-card">
+          <h2>Relics</h2>
+          <div id="relicList" class="list-block"></div>
+        </section>
+
+        <section class="card statuses-card">
+          <h2>Status Effects</h2>
+          <div id="statusList" class="list-block"></div>
+        </section>
+
+        <section class="card town-card">
+          <h2>Town Access</h2>
+          <div class="town-buttons">
+            <button id="townBtn">Town Hub</button>
+            <button id="statsBtn">Refresh UI</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
